@@ -95,8 +95,8 @@ async def get_tiktok_data(url: str) -> dict:
         video_data = data.get("data", {})
         
         return {
-            "video_hd": f"https://www.tikwm.com{video_data.get('hdplay', video_data.get('play', ''))}",
-            "video_sd": f"https://www.tikwm.com{video_data.get('play', '')}",
+            "video_hd": video_data.get('hdplay') or video_data.get('play', ''),
+            "video_sd": video_data.get('play', ''),
             "thumbnail": video_data.get("cover", ""),
             "title": video_data.get("title", "Video do TikTok"),
             "author": video_data.get("author", {}).get("nickname", ""),
