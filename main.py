@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
@@ -129,6 +130,17 @@ async def download_video(request: VideoRequest):
         return VideoResponse(success=False, error=e.detail)
     except Exception as e:
         return VideoResponse(success=False, error="Erro ao processar video. Tente novamente.")
+
+@app.get("/download")
+async def download_redirect(url: str):
+    """Redireciona para o vídeo com header de download"""
+    if not url:
+        raise HTTPException(status_code=400, detail="URL não fornecida")
+    
+    # Adiciona parâmetro para forçar download
+    response = RedirectResponse(url=url)
+    response.headers["Content-Disposition"] = "attachment; filename=tiktok_video.mp4"
+    return response
 
 if __name__ == "__main__":
     import uvicorn
