@@ -1,10 +1,9 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
 import re
-import json
 
 app = FastAPI(title="SSSTiik API")
 
@@ -61,7 +60,6 @@ async def get_tiktok_data(url: str) -> dict:
             break
     
     if not video_id:
-        # Tentar extrair de URL mobile
         if '@' in url and '/' in url:
             parts = url.split('/')
             for part in parts:
@@ -72,7 +70,6 @@ async def get_tiktok_data(url: str) -> dict:
     if not video_id:
         raise HTTPException(status_code=400, detail="Nao foi possivel extrair o ID do video")
     
-    # Usar API tikwm.com
     api_url = f"https://www.tikwm.com/api/?url={url}"
     
     headers = {
@@ -102,6 +99,7 @@ async def get_tiktok_data(url: str) -> dict:
             "title": video_data.get("title", "Video do TikTok"),
             "author": video_data.get("author", {}).get("nickname", ""),
             "duration": video_data.get("duration", 0),
+            "video_id": video_id,
         }
 
 @app.post("/api/download", response_model=VideoResponse)
@@ -131,25 +129,34 @@ async def download_video(request: VideoRequest):
     except Exception as e:
         return VideoResponse(success=False, error="Erro ao processar video. Tente novamente.")
 
-from fastapi.responses import StreamingResponse
-
 @app.get("/download")
-async def download_video_file(url: str):
-    """Baixa o vídeo e envia como arquivo .mp4"""
+async def download_file(url: str, filename: str = "tiktok_video"):
+    """Proxy que baixa o video e entrega com nome .mp4"""
     if not url:
-        raise HTTPException(status_code=400, detail="URL não fornecida")
+        raise HTTPException(status_code=400, detail="URL nao fornecida")
+    
+    # Limpar filename
+    safe_filename = re.sub(r'[^\w\-]', '_', filename)[:50]
+    if not safe_filename:
+        safe_filename = "tiktok_video"
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://www.tikwm.com/",
+    }
     
     async def stream_video():
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("GET", url) as response:
-                async for chunk in response.aiter_bytes(chunk_size=8192):
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            async with client.stream("GET", url, headers=headers) as response:
+                async for chunk in response.aiter_bytes(chunk_size=65536):
                     yield chunk
     
     return StreamingResponse(
         stream_video(),
         media_type="video/mp4",
         headers={
-            "Content-Disposition": "attachment; filename=tiktok_video.mp4"
+            "Content-Disposition": f'attachment; filename="{safe_filename}.mp4"',
+            "Content-Type": "video/mp4",
         }
     )
 
